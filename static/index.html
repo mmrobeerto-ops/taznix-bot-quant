@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="es" translate="no">
+<head>
+    <meta name="google" content="notranslate">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TZANiX Quant | Motor Algorítmico Institucional</title>
+    <!-- Google Fonts: Outfit for headers, JetBrains Mono for logs, Inter for body -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- FontAwesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" crossorigin="anonymous">
+    <!-- HTML Canvas 2D telemetry graphics rendering -->
+    
+    <link rel="stylesheet" href="style.css?v=premium_v4">
+    <script>
+        window.onerror = function(message, source, lineno, colno, error) {
+            fetch('/api/log_error', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    message: message || '',
+                    source: source || '',
+                    lineno: lineno || 0,
+                    colno: colno || 0,
+                    error: error ? (error.stack || error.toString()) : ''
+                })
+            }).catch(e => console.error("Error reporting failed:", e));
+            return false;
+        };
+    </script>
+</head>
+<body>
+    <div class="hologram-overlay"></div>
+    <div class="app-container">
+        <header class="app-header">
+            <div class="logo-area">
+                <i class="fa-solid fa-microchip logo-icon" style="color:#10B981;"></i>
+                <div class="logo-text">
+                    <span class="logo-title">
+                        TZANiX <span class="accent-text" style="color:#10B981; text-shadow:none;">Æther Core</span>
+                    </span>
+                    <span class="logo-subtitle">NÚCLEO DE CÓMPUTO HFT DE ULTRA-BAJA LATENCIA</span>
+                </div>
+            </div>
+            
+            <div class="header-status-indicators">
+                <div class="status-indicator-badge" id="indicator-engine">
+                    <span class="badge-dot"></span>
+                    <span class="badge-label">Engine: <span id="val-engine-badge">INITIALIZING</span></span>
+                </div>
+                <div class="status-indicator-badge" id="indicator-news">
+                    <span class="badge-dot"></span>
+                    <span class="badge-label">News Lock: <span id="val-news-badge">INACTIVE</span></span>
+                </div>
+                <div class="status-indicator-badge" id="indicator-websocket">
+                    <span class="badge-dot"></span>
+                    <span class="badge-label">Socket: <span id="val-ws-badge">DISCONNECTED</span></span>
+                </div>
+            </div>
+            
+            <div class="header-time" id="header-clock">00:00:00 UTC</div>
+        </header>
+
+        <!-- Metrics Cards Grid -->
+        <section class="metrics-grid">
+            <!-- Card 1: Engine Status & Control -->
+            <div class="metric-card glass-panel status-card">
+                <div class="card-header">
+                    <span class="card-title">SYSTEM AUTOPILOT</span>
+                    <i class="fa-solid fa-power-off card-icon"></i>
+                </div>
+                <div class="card-value-container">
+                    <div class="engine-state-large" id="lbl-engine-state">ACTIVE</div>
+                </div>
+                <div class="card-footer-controls">
+                    <button class="btn btn-gold" id="btn-toggle-autopilot">
+                        <i class="fa-solid fa-pause"></i> <span id="lbl-toggle-btn">Pause Engine</span>
+                    </button>
+                    <button class="btn btn-danger btn-pulse" id="btn-reset-killswitch" disabled>
+                        <i class="fa-solid fa-triangle-exclamation"></i> Reset Kill-Switch
+                    </button>
+                </div>
+            </div>
+
+            <!-- Card 2: Session Performance -->
+            <div class="metric-card glass-panel">
+                <div class="card-header">
+                    <span class="card-title">SESSION P&L</span>
+                    <i class="fa-solid fa-chart-line card-icon"></i>
+                </div>
+                <div class="card-value-container">
+                    <div class="metric-value-large positive" id="val-session-pnl">$0.00</div>
+                </div>
+                <div class="card-details">
+                    <span>Capital: <span class="gold-text" id="val-session-capital">$100,000.00</span></span>
+                    <span>Peak PnL: <span id="val-session-peak">$0.00</span></span>
+                </div>
+            </div>
+
+            <!-- Card 3: Execution Metrics -->
+            <div class="metric-card glass-panel">
+                <div class="card-header">
+                    <span class="card-title">WIN / LOSS RATIO</span>
+                    <i class="fa-solid fa-trophy card-icon"></i>
+                </div>
+                <div class="card-value-container">
+                    <div class="metric-value-large gold-text" id="val-win-rate">0.0%</div>
+                </div>
+                <div class="card-details">
+                    <span>Total Trades: <span id="val-total-trades">0</span></span>
+                    <span>Wins: <span class="text-green" id="val-total-wins">0</span></span>
+                </div>
+            </div>
+
+            <!-- Card 4: Drawdown Risk Limit (Kill-Switch progress) -->
+            <div class="metric-card glass-panel">
+                <div class="card-header">
+                    <span class="card-title">KILL-SWITCH TRACKER</span>
+                    <i class="fa-solid fa-shield-halved card-icon"></i>
+                </div>
+                <div class="card-value-container flex-column">
+                    <div class="progress-bar-container">
+                        <div class="progress-bar" id="killswitch-progress" style="width: 0%"></div>
+                    </div>
+                    <div class="progress-labels">
+                        <span id="val-risk-current">-$0.00</span>
+                        <span>Limit: <span class="danger-text" id="val-risk-limit">-$500.00</span></span>
+                    </div>
+                </div>
+                <div class="card-details">
+                    <span>Status: <span id="lbl-killswitch-status" class="text-green">SAFE</span></span>
+                </div>
+            </div>
+        </section>
+
+        <!-- Main Workspace (Chart and Configuration) -->
+        <main class="dashboard-body">
+            <!-- Left Workspace: Chart Console -->
+            <div class="chart-section glass-panel">
+                <div class="section-header" style="display: flex; justify-content: space-between; align-items: center; padding: 0.5rem 1rem;">
+                    <div class="header-tab-group">
+                        <span class="tab-title active"><i class="fa-solid fa-microchip"></i> HFT SPREAD & ORDER BOOK HEATMAP</span>
+                    </div>
+                    <div class="header-price-ticker" style="display: flex; align-items: center; gap: 0.5rem; font-family: var(--font-mono); font-size: 1.05rem; font-weight: 600; color: #FFFFFF;">
+                        <span style="color: var(--text-secondary); font-size: 0.8rem; font-weight: 500;">BTC/USDT:</span>
+                        <span id="live-btc-price" style="font-size: 1.15rem; color: #FFFFFF; font-weight: 700; text-shadow: none;">$77,000.00</span>
+                    </div>
+                </div>
+                <div class="chart-viewport-wrapper" style="position: relative; height: calc(100% - 45px); background-color: #000000; border: 1px solid #222;">
+                    <div id="threejs-canvas-container" style="width:100%; height:100%; position:relative; overflow:hidden;">
+                    </div>
+                </div>
+            </div>
+ 
+            <!-- Right Workspace: Config & Trade Monitor -->
+            <div class="sidebar-section">
+                <!-- Active Position Monitor -->
+                <div class="position-monitor glass-panel">
+                    <div class="section-header">
+                        <span class="section-header-title"><i class="fa-solid fa-briefcase"></i> ACTIVE POSITION</span>
+                    </div>
+                    <div class="position-details-container" id="position-container" style="min-height: 120px;">
+                        <!-- Simulated active position info -->
+                        <div class="position-empty-state" id="pos-empty-state">
+                            <i class="fa-solid fa-box-open empty-icon"></i>
+                            <p>No active positions open.</p>
+                            <span class="empty-sub">Awaiting TZANiX Quant SFA triggers...</span>
+                        </div>
+                        <div class="position-active-state hide" id="pos-active-state">
+                            <div class="pos-top-row">
+                                <span class="pos-badge" id="lbl-pos-type">BUY</span>
+                                <span class="pos-qty">Size: <span id="lbl-pos-qty">1.00</span> Lots</span>
+                            </div>
+                            <div class="pos-grid">
+                                <div class="pos-field">
+                                    <span class="pos-field-lbl">Entry Price</span>
+                                    <span class="pos-field-val" id="lbl-pos-entry">$0.00</span>
+                                </div>
+                                <div class="pos-field">
+                                    <span class="pos-field-lbl">Current Price</span>
+                                    <span class="pos-field-val" id="lbl-pos-current">$0.00</span>
+                                </div>
+                                <div class="pos-field">
+                                    <span class="pos-field-lbl">Stop Loss</span>
+                                    <span class="pos-field-val gold-text" id="lbl-pos-sl">$0.00</span>
+                                </div>
+                                <div class="pos-field">
+                                    <span class="pos-field-lbl">Take Profit</span>
+                                    <span class="pos-field-val text-green" id="lbl-pos-tp">$0.00</span>
+                                </div>
+                            </div>
+                            <!-- MERGED QUANTUM METRICS -->
+                            <div class="pos-grid" style="margin-top: 0.25rem; border-top: 1px dashed #333; padding-top: 0.25rem;">
+                                <div class="pos-field">
+                                    <span class="pos-field-lbl">Z-Score (Desviación)</span>
+                                    <span class="pos-field-val" id="lbl-zscore" style="color: #00FF66;">0.00</span>
+                                </div>
+                                <div class="pos-field">
+                                    <span class="pos-field-lbl">OFI (Presión Volumen)</span>
+                                    <span class="pos-field-val" id="lbl-ofi" style="color: #00FF66;">0.00</span>
+                                </div>
+                            </div>
+                            <div class="pos-pnl-banner">
+                                <span class="pnl-banner-lbl">Unrealized P&L</span>
+                                <span class="pnl-banner-val" id="lbl-pos-pnl">+$0.00</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- HFT Telemetry Widget -->
+                <div class="config-panel glass-panel" style="padding: 0.75rem;">
+                    <div class="section-header">
+                        <span class="section-header-title"><i class="fa-solid fa-gauge-high"></i> HFT NETWORK TELEMETRY</span>
+                    </div>
+                    <div style="font-size: 10px; color: var(--text-secondary); display: flex; flex-direction: column; gap: 4px; font-family: var(--font-mono); margin-bottom: 6px;">
+                        <div style="display: flex; justify-content: space-between;">
+                            <span>Gateway RTT:</span><span style="color: var(--color-green); font-weight: bold;">25 ms</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between;">
+                            <span>Core Compute:</span><span style="color: var(--color-green); font-weight: bold;">0.05 ms (50 µs)</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between;">
+                            <span>Fill Rate (Maker):</span><span style="color: var(--color-green); font-weight: bold;">98.5%</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between;">
+                            <span>Avg Slippage:</span><span style="color: var(--color-green); font-weight: bold;">0.00 Ticks</span>
+                        </div>
+                    </div>
+                    <!-- T2T Histogram Small Canvas -->
+                    <canvas id="hft-t2t-histogram" style="height: 42px; width: 100%; background: #000000; border: 1px solid #222;"></canvas>
+                </div>
+
+                <!-- Parameters & Configurations -->
+                <div class="config-panel glass-panel">
+                    <div class="section-header">
+                        <span class="section-header-title"><i class="fa-solid fa-sliders"></i> DYNAMIC PARAMETERS</span>
+                    </div>
+                    <!-- LIVE RISK STATUS OVERVIEW -->
+                    <div style="font-size: 10px; display: grid; grid-template-columns: 1fr 1fr; gap: 4px; font-family: var(--font-mono); margin-bottom: 8px; border-bottom: 1px solid #222; padding-bottom: 6px;">
+                        <div>Margin In-Use: <span style="color: #FFF;">25%</span></div>
+                        <div>Total Exposure: <span style="color: #FFF;">0.05 BTC</span></div>
+                        <div>Max Drawdown: <span style="color: #FF3333;">0.0%</span></div>
+                        <div>Killswitch Dist: <span style="color: #00FF66;">Safe</span></div>
+                    </div>
+                    <!-- GATEKEEPER STATUS TRAFFIC LIGHTS -->
+                    <div style="font-size: 10px; display: flex; flex-direction: column; gap: 4px; font-family: var(--font-mono); margin-bottom: 8px; border-bottom: 1px solid #222; padding-bottom: 6px;">
+                        <div style="display: flex; align-items: center; gap: 6px;">
+                            <span id="light-ofi" style="width: 8px; height: 8px; border-radius: 50%; background: #00FF66; display: inline-block;"></span>
+                            <span>OFI Coherence Status</span>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 6px;">
+                            <span id="light-adx" style="width: 8px; height: 8px; border-radius: 50%; background: #00FF66; display: inline-block;"></span>
+                            <span>ADX Regime Validator</span>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 6px;">
+                            <span id="light-quarantine" style="width: 8px; height: 8px; border-radius: 50%; background: #555; display: inline-block;"></span>
+                            <span>Quarantine Zone Filter</span>
+                        </div>
+                    </div>
+                    <form class="config-form" id="risk-config-form" style="margin-top: 0px;">
+                        <div class="form-group">
+                            <div class="form-label-row">
+                                <label for="input-loss-limit">Daily Loss Limit ($)</label>
+                                <span class="input-display" id="display-loss-limit">$30000.00</span>
+                            </div>
+                            <input type="range" class="form-range" id="input-loss-limit" min="500" max="50000" step="500" value="30000">
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </main>
+ 
+        <!-- Bottom Audit Log Console -->
+        <section class="audit-console glass-panel" style="height: 220px;">
+            <div class="section-header border-bottom">
+                <div class="console-tabs">
+                    <button class="console-tab active" id="tab-log-all">
+                        <i class="fa-solid fa-terminal"></i> ALL ENGINE LOGS
+                    </button>
+                    <button class="console-tab" id="tab-log-orders">
+                        <i class="fa-solid fa-list-check"></i> SIGNAL AUDIT TRAIL (SQLITE)
+                    </button>
+                </div>
+                <div style="display: flex; gap: 0.5rem;">
+                    <button class="btn btn-mini btn-gold" id="btn-show-history" style="font-weight: 700;">
+                        <i class="fa-solid fa-clock-history"></i> VER HISTORIAL
+                    </button>
+                    <button class="btn btn-mini btn-outline" id="btn-clear-terminal">
+                        <i class="fa-solid fa-eraser"></i> Clear Terminal
+                    </button>
+                    <button class="btn btn-mini btn-outline" id="btn-reset-db" style="border-color: rgba(239, 68, 68, 0.4); color: #f87171; font-weight: 700;">
+                        <i class="fa-solid fa-trash-can" style="color: #f87171;"></i> REINICIAR DATOS
+                    </button>
+                </div>
+            </div>
+            
+            <div class="console-output" id="terminal-output" style="padding: 0px;">
+                <table style="width: 100%; border-collapse: collapse; font-family: var(--font-mono); font-size: 11px; text-align: left;">
+                    <thead>
+                        <tr style="border-bottom: 2px solid #333; color: var(--text-secondary); background: #0F0F0F; position: sticky; top: 0; z-index: 10;">
+                            <th style="padding: 4px 8px; font-weight: 600;">TIMESTAMP</th>
+                            <th style="padding: 4px 8px; font-weight: 600;">ACCION</th>
+                            <th style="padding: 4px 8px; font-weight: 600;">TIEMPO</th>
+                            <th style="padding: 4px 8px; font-weight: 600;">PRECIO</th>
+                            <th style="padding: 4px 8px; font-weight: 600;">Z-SCORE</th>
+                            <th style="padding: 4px 8px; font-weight: 600;">OFI</th>
+                            <th style="padding: 4px 8px; font-weight: 600;">ADX</th>
+                            <th style="padding: 4px 8px; font-weight: 600;">ESTADO / MOTIVO</th>
+                        </tr>
+                    </thead>
+                    <tbody id="terminal-table-body">
+                        <!-- Table rows will be appended here dynamically -->
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </div>
+
+    <!-- Alert Modal / Banner for news events -->
+    <div class="news-banner-alert hide" id="news-banner-alert">
+        <div class="news-banner-content">
+            <i class="fa-solid fa-triangle-exclamation news-banner-icon"></i>
+            <div class="news-banner-text">
+                <span class="news-alert-title">HIGH IMPACT FUNDAMENTAL EVENT DETECTED</span>
+                <span class="news-alert-desc" id="lbl-news-alert-desc">US Federal Reserve announces unexpected interest rate decision</span>
+            </div>
+        </div>
+        <div class="news-countdown-box">
+            <span class="countdown-label">COOLDOWN</span>
+            <span class="countdown-time" id="val-news-countdown">20s</span>
+        </div>
+    </div>
+    
+    <!-- History Modal -->
+    <div class="modal-overlay hide" id="history-modal">
+        <div class="modal-content glass-panel">
+            <div class="modal-header">
+                <h3><i class="fa-solid fa-clock-history"></i> HISTORIAL DE OPERACIONES (SQLITE)</h3>
+                <button class="modal-close-btn" id="btn-close-history">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="table-container">
+                    <table class="history-table">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Fecha/Hora (Local)</th>
+                                <th>Tipo</th>
+                                <th>Lotes</th>
+                                <th>Entrada</th>
+                                <th>Stop Loss</th>
+                                <th>Take Profit</th>
+                                <th>Cierre</th>
+                                <th>P&L ($)</th>
+                                <th>Duración</th>
+                                <th>Detalle / Razón</th>
+                            </tr>
+                        </thead>
+                        <tbody id="history-table-body">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="tzanix_quantum-core.js?v=tensor_deform_v4"></script>
+    <script src="app.js?v=synapses4"></script>
+</body>
+</html>

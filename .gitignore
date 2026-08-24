@@ -1,0 +1,33 @@
+# Environments
+.env
+.venv
+venv
+env
+
+# Databases
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+tzanix.db
+sfa_ifa_pro_test.db
+sfa_ifa_pro.db
+
+# Python caches
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Rust build target
+rust_core/target/
+target/
+
+# IDE files
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp

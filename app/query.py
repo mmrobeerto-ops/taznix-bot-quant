@@ -1,0 +1,1 @@
+import sqlite3; conn = sqlite3.connect('sfa_ifa_pro.db'); cursor = conn.cursor(); cursor.execute('''SELECT * FROM orders WHERE status != 'REJECTED' ORDER BY timestamp DESC LIMIT 1'''); result = cursor.fetchone(); open('result.txt', 'w', encoding='utf-8').write(str(result));

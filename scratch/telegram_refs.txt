@@ -1,0 +1,15 @@
+61: def _send_telegram_notification(self, message: str):
+62: token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+63: chat_id = os.environ.get("TELEGRAM_CHAT_ID", "")
+64: if not token or not chat_id or token == "YOUR_TELEGRAM_BOT_TOKEN" or token == "":
+69: url = f"https://api.telegram.org/bot{token}/sendMessage"
+78: print(f"Error sending Telegram notification: {e}")
+699: self._send_telegram_notification(
+738: self._send_telegram_notification(f"🛡️ *TZANiX Quant: BREAK-EVEN ACTIVADO* 🛡️\n\n*Posición*: BUY\n*Precio Entrada*: ${entry_price:.2f}\n*Stop Loss ajustado a*: ${entry_price:.2f}")
+744: self._send_telegram_notification(f"🛡️ *TZANiX Quant: BREAK-EVEN ACTIVADO* 🛡️\n\n*Posición*: SELL\n*Precio Entrada*: ${entry_price:.2f}\n*Stop Loss ajustado a*: ${entry_price:.2f}")
+969: # Send Telegram alert
+970: self._send_telegram_notification(
+1360: # Send Telegram alert
+1363: telegram_msg = (
+1374: telegram_msg = (
+1383: self._send_telegram_notification(telegram_msg)
