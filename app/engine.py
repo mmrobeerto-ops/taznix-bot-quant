@@ -1038,7 +1038,12 @@ class TradingEngine:
         # TP1: Take partial 50% profit at 0.60% gross gain (0.5% net target + 0.08% commissions + 0.02% spread) and move Stop Loss to Break-even
         if os.environ.get("TESTING") != "True" and pnl_pct >= 0.60 and not pos.get("tp1_reached", False):
             pos["tp1_reached"] = True
-            close_qty = max(0.0001, round(qty * 0.5, 4))
+            formatted_half = self.broker.format_quantity(qty * 0.5)
+            if formatted_half >= qty or formatted_half <= 0.0:
+                self._close_position(f"[TP1 FULL CLOSE] Price reached TP1 (+0.60%) but position size ({qty} BTC) is too small to split. Closing 100%.", price, pnl_val, current_time)
+                return
+                
+            close_qty = formatted_half
             opposite_side = "SELL" if pos["type"] == "BUY" else "BUY"
             try:
                 broker_res = self.broker.execute_order(opposite_side, price, close_qty)
@@ -2129,17 +2134,18 @@ class TradingEngine:
         # Format and round
         qty = round(qty, 4)
         
-        # Capping for safety (minimum 0.0001 BTC, maximum 0.050 BTC on real accounts, 1.000 BTC in tests)
+        # Capping for safety (minimum 0.001 BTC in production, 1.000 BTC in tests)
         max_limit = 1.000 if is_testing else 0.050
-        qty = max(0.0001, min(max_limit, qty))
+        min_limit = 0.0001 if is_testing else 0.001
+        qty = max(min_limit, min(max_limit, qty))
         
-        # Ensure minimum lot size for Binance BTC/USDT Futures (strictly 0.0001 BTC)
-        if qty < 0.0001:
-            qty = 0.0001
+        # Ensure minimum lot size for Binance BTC/USDT Futures
+        if qty < min_limit:
+            qty = min_limit
 
-        # Force strict minimal lot size for production live accounts to test safely
+        # Force strict minimal lot size for production live accounts to test safely (Binance Futures limit is 0.001 BTC)
         if not is_testing:
-            qty = 0.0001
+            qty = 0.001
         
         if os.environ.get("TESTING") == "True" and (not getattr(self.config, "use_atr_risk", True) or atr is None or atr == 0.0):
             tp_multiplier = 36.0
