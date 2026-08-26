@@ -322,6 +322,21 @@ class TradingEngine:
                 if not (ofi <= 0.0 and z_score > 0.0):
                     return False, f"OFI/Z-Score Incoherente en rango (OFI={ofi:.2f} > 0 o Z={z_score:.2f} <= 0)"
 
+        # 1.1 VETO HFT: Divergencia OFI vs. TFI (Spoofing / Muro Iceberg)
+        if hasattr(self, "last_real_l2_ofi"):
+            if signal_type == "BUY" and self.last_real_l2_ofi > 10.0 and ofi < -0.1:
+                return False, f"[SPOOFING VETO] OFI L2 Positivo ({self.last_real_l2_ofi:.1f}) pero TFI Negativo ({ofi:.2f}): Takers vendiendo contra muro de compra."
+            elif signal_type == "SELL" and self.last_real_l2_ofi < -10.0 and ofi > 0.1:
+                return False, f"[SPOOFING VETO] OFI L2 Negativo ({self.last_real_l2_ofi:.1f}) pero TFI Positivo ({ofi:.2f}): Takers comprando contra muro de venta."
+
+        # 1.2 VETO HFT: Oráculo Lead-Lag (Spot vs. Futuros)
+        LEAD_LAG_THRESHOLD = 15.0
+        if getattr(self, "last_spot_micro_price", None) is not None and getattr(self, "last_micro_price", None) is not None:
+            if signal_type == "BUY" and self.last_spot_micro_price < self.last_micro_price - LEAD_LAG_THRESHOLD:
+                return False, f"[LEAD-LAG VETO] Spot micro-price (${self.last_spot_micro_price:.2f}) liderando caída bajo Futuros (${self.last_micro_price:.2f})."
+            elif signal_type == "SELL" and self.last_spot_micro_price > self.last_micro_price + LEAD_LAG_THRESHOLD:
+                return False, f"[LEAD-LAG VETO] Spot micro-price (${self.last_spot_micro_price:.2f}) liderando alza sobre Futuros (${self.last_micro_price:.2f})."
+
         # 2. Filtro de Régimen por ADX y Tendencia 15m (EMA 9 vs EMA 21)
         if is_trending:
             if signal_type == "BUY" and not is_bullish_trend_15m:
@@ -689,7 +704,9 @@ class TradingEngine:
         micro_price: Optional[float] = None,
         mid_price: Optional[float] = None,
         cvd: float = 0.0,
-        open_interest: float = 0.0
+        open_interest: float = 0.0,
+        real_l2_ofi: float = 0.0,
+        spot_micro_price: Optional[float] = None
     ) -> Dict:
         """Processes an incoming market tick, computes indicators, evaluates signals, and manages risk."""
         if self.kill_switch_active:
@@ -702,6 +719,8 @@ class TradingEngine:
         self.last_mid_price = mid_price
         self.last_cvd = cvd
         self.last_open_interest = open_interest
+        self.last_real_l2_ofi = real_l2_ofi
+        self.last_spot_micro_price = spot_micro_price
         
         # Update C-level Static Circular Buffer for 4DNR2 (Zero Allocations)
         try:

@@ -37,8 +37,17 @@ class MarketDataFeed:
         self.latest_open_interest: float = 0.0
         self.cvd: float = 0.0
         
+        # Spot Oracle and L2 OFI State Variables
+        self.latest_spot_micro_price: Optional[float] = None
+        self.prev_bid_price: Optional[float] = None
+        self.prev_bid_qty: Optional[float] = None
+        self.prev_ask_price: Optional[float] = None
+        self.prev_ask_qty: Optional[float] = None
+        self.latest_l2_ofi: float = 0.0
+        
         # Concurrent tasks
         self.listener_task: Optional[asyncio.Task] = None
+        self.spot_listener_task: Optional[asyncio.Task] = None
         self.timer_task: Optional[asyncio.Task] = None
         
         # Track ticks
@@ -53,17 +62,20 @@ class MarketDataFeed:
         
         # Launch WebSocket listener and 1-second aggregation timer loops
         self.listener_task = asyncio.create_task(self._listen_binance_websocket())
+        self.spot_listener_task = asyncio.create_task(self._listen_binance_spot_websocket())
         self.timer_task = asyncio.create_task(self._timer_loop())
-        log_to_db("INFO", "Market Data Feed: Connecting to live Binance BTC/USDT stream...")
+        log_to_db("INFO", "Market Data Feed: Connecting to live Binance Futures & Spot BTC/USDT streams...")
 
     def stop(self):
         """Stops the live market feed connection."""
         self.running = False
         if self.listener_task:
             self.listener_task.cancel()
+        if self.spot_listener_task:
+            self.spot_listener_task.cancel()
         if self.timer_task:
             self.timer_task.cancel()
-        log_to_db("INFO", "Market Data Feed: Live Binance feed stopped.")
+        log_to_db("INFO", "Market Data Feed: Live Binance feeds stopped.")
 
     async def _listen_binance_websocket(self):
         """WebSocket consumer listening to live Binance Futures combined stream (Trade + Order Book + Open Interest)."""
@@ -149,6 +161,33 @@ class MarketDataFeed:
                                     self.latest_micro_price = p_bid * (v_ask / total_vol) + p_ask * (v_bid / total_vol)
                                     self.latest_mid_price = (p_bid + p_ask) / 2.0
                                     
+                                # Calculate Cont-Stoikov L2 Order Flow Imbalance (OFI)
+                                delta_bid = 0.0
+                                if self.prev_bid_price is not None:
+                                    if p_bid > self.prev_bid_price:
+                                        delta_bid = v_bid
+                                    elif p_bid == self.prev_bid_price:
+                                        delta_bid = v_bid - self.prev_bid_qty
+                                    else:
+                                        delta_bid = -self.prev_bid_qty
+                                        
+                                delta_ask = 0.0
+                                if self.prev_ask_price is not None:
+                                    if p_ask > self.prev_ask_price:
+                                        delta_ask = -self.prev_ask_qty
+                                    elif p_ask == self.prev_ask_price:
+                                        delta_ask = v_ask - self.prev_ask_qty
+                                    else:
+                                        delta_ask = v_ask
+                                        
+                                self.latest_l2_ofi = delta_bid - delta_ask
+                                
+                                # Store state
+                                self.prev_bid_price = p_bid
+                                self.prev_bid_qty = v_bid
+                                self.prev_ask_price = p_ask
+                                self.prev_ask_qty = v_ask
+                                    
                         elif stream_name == "btcusdt@openInterest":
                             # Parse Open Interest in BTC
                             self.latest_open_interest = float(data.get("o", 0.0))
@@ -160,6 +199,40 @@ class MarketDataFeed:
                 log_to_db("WARNING", f"Market Data Feed: Binance connection lost ({e}). Reconnecting in {backoff}s...")
                 await asyncio.sleep(backoff)
                 backoff = min(backoff * 2, 60) # Exponential capped at 1 minute
+
+    async def _listen_binance_spot_websocket(self):
+        """WebSocket consumer listening to live Binance Spot book depth to calculate Spot micro-price."""
+        url = "wss://stream.binance.com/stream?streams=btcusdt@depth5@100ms"
+        backoff = 2
+        
+        while self.running:
+            try:
+                async with websockets.connect(url) as websocket:
+                    backoff = 2 # Reset connection backoff
+                    log_to_db("INFO", "Market Data Feed: WebSocket connected to Binance Spot (depth5).")
+                    
+                    while self.running:
+                        message = await websocket.recv()
+                        payload = json.loads(message)
+                        data = payload.get("data", {})
+                        
+                        bids = data.get("b", [])
+                        asks = data.get("a", [])
+                        if bids and asks:
+                            p_bid = float(bids[0][0])
+                            v_bid = float(bids[0][1])
+                            p_ask = float(asks[0][0])
+                            v_ask = float(asks[0][1])
+                            total_vol = v_bid + v_ask
+                            if total_vol > 0:
+                                self.latest_spot_micro_price = p_bid * (v_ask / total_vol) + p_ask * (v_bid / total_vol)
+                                
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                log_to_db("WARNING", f"Market Data Feed: Binance Spot connection lost ({e}). Reconnecting in {backoff}s...")
+                await asyncio.sleep(backoff)
+                backoff = min(backoff * 2, 60)
 
     async def _timer_loop(self):
         """Timer loop that runs every 1 second to process aggregated market ticks through SFA engine."""
@@ -195,7 +268,9 @@ class MarketDataFeed:
                             micro_price=self.latest_micro_price,
                             mid_price=self.latest_mid_price,
                             cvd=self.cvd,
-                            open_interest=self.latest_open_interest
+                            open_interest=self.latest_open_interest,
+                            real_l2_ofi=self.latest_l2_ofi,
+                            spot_micro_price=self.latest_spot_micro_price
                         )
                         
                         # Fetch latest metrics
@@ -214,6 +289,8 @@ class MarketDataFeed:
                             "z_score": tick_data.get("z_score"),
                             "micro_price": self.latest_micro_price,
                             "mid_price": self.latest_mid_price,
+                            "spot_micro_price": self.latest_spot_micro_price,
+                            "real_l2_ofi": self.latest_l2_ofi,
                             "bids": self.latest_bids,
                             "asks": self.latest_asks,
                             "adx_15m": self.engine.last_adx_15m,
