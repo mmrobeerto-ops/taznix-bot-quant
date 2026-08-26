@@ -2143,9 +2143,9 @@ class TradingEngine:
         if qty < min_limit:
             qty = min_limit
 
-        # Force strict minimal lot size for production live accounts to test safely (Binance Futures limit is 0.001 BTC)
+        # Force strict minimal lot size for production live accounts to test safely (Configured to 0.005 BTC)
         if not is_testing:
-            qty = 0.001
+            qty = 0.005
         
         if os.environ.get("TESTING") == "True" and (not getattr(self.config, "use_atr_risk", True) or atr is None or atr == 0.0):
             tp_multiplier = 36.0
