@@ -302,8 +302,11 @@ class TradingEngine:
             is_bearish_trend_15m = ema_fast_15m < ema_slow_15m
 
         # 1. Gatekeeper de Flujo y Desviación Estadística (OFI / Z-Score)
+        MAX_Z_SCORE_EXTENSION = 3.0
         if signal_type == "BUY":
             if is_trending and is_bullish_trend_15m:
+                if z_score > MAX_Z_SCORE_EXTENSION:
+                    return False, f"Z-Score suicida en tendencia alcista (Z={z_score:.2f} > {MAX_Z_SCORE_EXTENSION}). Esperando pullback."
                 if ofi < 0.0:
                     return False, f"OFI Incoherente en tendencia alcista (OFI={ofi:.2f} < 0)"
             else:
@@ -311,6 +314,8 @@ class TradingEngine:
                     return False, f"OFI/Z-Score Incoherente en rango (OFI={ofi:.2f} < 0 o Z={z_score:.2f} >= 0)"
         elif signal_type == "SELL":
             if is_trending and is_bearish_trend_15m:
+                if z_score < -MAX_Z_SCORE_EXTENSION:
+                    return False, f"Z-Score suicida en tendencia bajista (Z={z_score:.2f} < -{MAX_Z_SCORE_EXTENSION}). Esperando rebote."
                 if ofi > 0.0:
                     return False, f"OFI Incoherente en tendencia bajista (OFI={ofi:.2f} > 0)"
             else:
@@ -2130,6 +2135,10 @@ class TradingEngine:
         
         # Ensure minimum lot size for Binance BTC/USDT Futures (strictly 0.0001 BTC)
         if qty < 0.0001:
+            qty = 0.0001
+
+        # Force strict minimal lot size for production live accounts to test safely
+        if not is_testing:
             qty = 0.0001
         
         if os.environ.get("TESTING") == "True" and (not getattr(self.config, "use_atr_risk", True) or atr is None or atr == 0.0):
