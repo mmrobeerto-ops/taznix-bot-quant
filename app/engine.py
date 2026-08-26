@@ -543,6 +543,93 @@ class TradingEngine:
         finally:
             db.close()
 
+    def run_self_healing_check(self):
+        """
+        Sincronización bidireccional de estado REST con Binance.
+        Busca adoptar posiciones no registradas localmente o cerrar posiciones fantasma en memoria.
+        """
+        if os.environ.get("TESTING") == "True":
+            return
+            
+        from app.broker import BrokerClient
+        try:
+            broker = BrokerClient()
+            live_positions = broker._send_signed_request("GET", "/fapi/v2/positionRisk", {})
+            active_live = [p for p in live_positions if float(p.get("positionAmt", 0.0)) != 0.0]
+            
+            # Caso 1: Binance tiene posición pero el Bot NO -> Adoptarla
+            if active_live and not self.active_position:
+                pos_data = active_live[0]
+                qty = abs(float(pos_data["positionAmt"]))
+                entry_price = float(pos_data["entryPrice"])
+                pos_type = "BUY" if float(pos_data["positionAmt"]) > 0 else "SELL"
+                
+                # Calcular SL/TP
+                atr = self._calculate_atr(14)
+                atr_mult = getattr(self.config, "atr_multiplier", 3.5)
+                sl_dist = (atr * atr_mult) if (atr is not None and atr > 0.0) else (entry_price * (self.config.trailing_stop_pct / 100.0))
+                
+                sl = entry_price - sl_dist if pos_type == "BUY" else entry_price + sl_dist
+                tp = entry_price + (sl_dist * 2.0) if pos_type == "BUY" else entry_price - (sl_dist * 2.0)
+                
+                order_id = f"adopted_{int(time.time())}"
+                
+                db = SessionLocal()
+                try:
+                    db_order = OrderModel(
+                        id=order_id,
+                        timestamp=time.time(),
+                        type=pos_type,
+                        status="EXECUTED",
+                        entry_price=entry_price,
+                        quantity=qty,
+                        stop_loss=sl,
+                        take_profit=tp,
+                        reason="SELF-HEALING REST SYNC: Adopted out-of-sync active position found on Binance."
+                    )
+                    db.add(db_order)
+                    db.commit()
+                finally:
+                    db.close()
+                
+                self.active_position = {
+                    "id": order_id,
+                    "type": pos_type,
+                    "entry_price": entry_price,
+                    "quantity": qty,
+                    "stop_loss": sl,
+                    "take_profit": tp,
+                    "reason": "SELF-HEALING REST SYNC: Adopted out-of-sync active position found on Binance.",
+                    "timestamp": time.time(),
+                    "entry_atr": atr if (atr is not None and atr > 0.0) else (sl_dist / atr_mult),
+                    "peak_price": entry_price if pos_type == "BUY" else 0.0,
+                    "trough_price": entry_price if pos_type == "SELL" else 9999999.0,
+                    "tp1_reached": False
+                }
+                log_to_db("INFO", f"[SELF-HEALING] Adopted active Binance position: {pos_type} {qty} BTC @ ${entry_price:.2f}")
+
+            # Caso 2: El Bot piensa que tiene posición pero Binance NO -> Limpiar "posición fantasma"
+            elif not active_live and self.active_position:
+                ghost_id = self.active_position["id"]
+                log_to_db("WARNING", f"[SELF-HEALING] Ghost position detected (Bot thinks {self.active_position['type']} is open, but Binance has no active positions). Clearing local memory.")
+                
+                db = SessionLocal()
+                try:
+                    db_order = db.query(OrderModel).filter(OrderModel.id == ghost_id).first()
+                    if db_order and db_order.status == "EXECUTED":
+                        db_order.status = "CLOSED"
+                        db_order.profit_loss = 0.0
+                        db_order.close_price = self.last_z_score if hasattr(self, "last_z_score") else 0.0
+                        db_order.reason = f"{db_order.reason} | [SELF-HEALING] Closed automatically due to lack of active position on Binance."
+                        db.commit()
+                finally:
+                    db.close()
+                    
+                self.active_position = None
+                
+        except Exception as ex:
+            log_to_db("WARNING", f"[SELF-HEALING] Error during periodic synchronization: {ex}")
+
     def _warm_up_candles_from_binance(self):
         """Warm up local candle history by fetching recent 1m candles directly from Binance Futures API."""
         try:

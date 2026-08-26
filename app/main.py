@@ -30,6 +30,16 @@ feed = MarketDataFeed(engine)
 # Active WebSockets clients
 active_connections: Set[WebSocket] = set()
 
+async def self_healing_background_task(engine_inst: TradingEngine):
+    """Loop de sincronización REST bidireccional cada 5 minutos para evitar desincronizaciones."""
+    await asyncio.sleep(60)  # Esperar 1 minuto tras el arranque
+    while True:
+        try:
+            engine_inst.run_self_healing_check()
+        except Exception as e:
+            log_to_db("WARNING", f"Error in self_healing_background_task loop: {e}")
+        await asyncio.sleep(300)  # 5 minutos
+
 # Initialize Database on Startup
 @app.on_event("startup")
 async def startup_event():
@@ -42,6 +52,7 @@ async def startup_event():
         asyncio.create_task(broadcast_payload(payload))
         
     feed.start(broadcast_to_clients)
+    asyncio.create_task(self_healing_background_task(engine))
 
 @app.on_event("shutdown")
 async def shutdown_event():
