@@ -1213,3 +1213,86 @@ body {
     color: var(--text-secondary);
 }
 
+/* RESPONSIVE DESIGN FOR TABLETS AND MOBILE SCREENS */
+@media (max-width: 1024px) {
+    body {
+        overflow-y: auto !important;
+    }
+    .app-container {
+        height: auto !important;
+        overflow-y: visible !important;
+        padding: 0.5rem !important;
+        gap: 0.5rem !important;
+    }
+    .app-header {
+        flex-direction: column !important;
+        align-items: center !important;
+        gap: 0.75rem !important;
+        text-align: center !important;
+        padding: 0.75rem !important;
+    }
+    .header-status-indicators {
+        flex-wrap: wrap !important;
+        justify-content: center !important;
+        gap: 0.5rem !important;
+    }
+    .status-indicator-badge {
+        padding: 0.25rem 0.5rem !important;
+        font-size: 0.7rem !important;
+    }
+    .metrics-grid {
+        grid-template-columns: repeat(2, 1fr) !important;
+        gap: 0.5rem !important;
+    }
+    .dashboard-body {
+        display: flex !important;
+        flex-direction: column !important;
+        height: auto !important;
+        min-height: 0 !important;
+        gap: 0.75rem !important;
+    }
+    .chart-section {
+        height: 400px !important;
+        flex-shrink: 0 !important;
+    }
+    .sidebar-section {
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 0.75rem !important;
+    }
+    .audit-console {
+        height: auto !important;
+        min-height: 250px !important;
+        max-height: 400px !important;
+        display: flex !important;
+        flex-direction: column !important;
+    }
+    .console-output {
+        overflow-x: auto !important;
+        width: 100% !important;
+        flex: 1 !important;
+    }
+    .console-output table {
+        min-width: 700px !important;
+    }
+}
+
+@media (max-width: 480px) {
+    .metrics-grid {
+        grid-template-columns: 1fr !important;
+    }
+    .chart-section {
+        height: 300px !important;
+        padding: 0.5rem !important;
+    }
+    .header-clock {
+        font-size: 0.75rem !important;
+    }
+    .logo-title {
+        font-size: 1.1rem !important;
+    }
+    .logo-subtitle {
+        font-size: 0.55rem !important;
+    }
+}
+
