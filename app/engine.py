@@ -51,6 +51,8 @@ class TradingEngine:
         self.max_drawdown = 0.0
         self.peak_session_pnl = 0.0
         self.kill_switch_active = False
+        self.kill_switch_reason = None
+        self.kill_switch_activated_at = 0.0
         
         # News filter state
         self.news_paused = False
@@ -687,7 +689,14 @@ class TradingEngine:
         self.session_pnl = 0.0
         self.peak_session_pnl = 0.0
         self.max_drawdown = 0.0
+        self.kill_switch_reason = None
         log_to_db("INFO", "Kill-Switch manually reset. Session metrics cleared and execution re-enabled.")
+        self._send_telegram_notification(
+            "✅ *TZANiX - SISTEMA REINICIADO* ✅\n\n"
+            "⚡ *KILL-SWITCH DESACTIVADO*\n"
+            "• Estado: *ACTIVO*\n"
+            "• El bot ha reanudado la evaluación de señales en tiempo real."
+        )
 
     def update_config(self, new_config: RiskConfig):
         """Updates trading & risk parameters dynamically and saves them to SQLite."""
@@ -710,6 +719,28 @@ class TradingEngine:
     ) -> Dict:
         """Processes an incoming market tick, computes indicators, evaluates signals, and manages risk."""
         if self.kill_switch_active:
+            # Auto-Reset para Stale Data (Desconexión de red temporal)
+            if getattr(self, "kill_switch_reason", None) == "STALE_DATA":
+                cooldown_seconds = 300.0  # 5 minutos
+                time_since_trigger = time.time() - getattr(self, "kill_switch_activated_at", 0.0)
+                if time_since_trigger >= cooldown_seconds:
+                    current_drift = time.time() - (t0_binance / 1000.0) if t0_binance > 0 else 999.0
+                    # Si el retraso es de nuevo normal (< 50ms), reanudamos automáticamente
+                    if current_drift < 0.05:
+                        self.kill_switch_active = False
+                        self.kill_switch_reason = None
+                        log_to_db("INFO", f"Auto-Reset: Latencia normalizada a {current_drift*1000:.1f}ms. Reanudando operaciones.")
+                        self._send_telegram_notification(
+                            "✅ *TZANiX - AUTO-RESET EXITOSO* ✅\n\n"
+                            "⚡ *RECONEXIÓN ESTABILIZADA*\n"
+                            f"• Cooldown de 5m completado.\n"
+                            f"• Latencia actual: `{current_drift*1000:.1f}ms` (límite: 50ms).\n"
+                            "• El bot ha reanudado operaciones automáticamente."
+                        )
+                    else:
+                        # Registrar advertencia periódicamente (cada 60 segundos)
+                        if int(time_since_trigger) % 60 == 0:
+                            log_to_db("WARNING", f"Auto-Reset Pospuesto: Latencia sigue alta ({current_drift*1000:.1f}ms). Esperando red estable.")
             return {}
         if price <= 0.0:
             return {}
@@ -1421,7 +1452,17 @@ class TradingEngine:
 
         if current_loss <= -self.config.daily_loss_limit:
             self.kill_switch_active = True
+            self.kill_switch_reason = "DAILY_DRAWDOWN"
+            self.kill_switch_activated_at = time.time()
             log_to_db("CRITICAL", f"EMERGENCY KILL-SWITCH TRIGGERED: Session PnL is ${current_loss:.2f}, exceeding limit of -${self.config.daily_loss_limit:.2f}.")
+            self._send_telegram_notification(
+                "⚠️ *TZANiX - ALERTA DE RIESGO CRÍTICO* ⚠️\n\n"
+                "🚨 *KILL-SWITCH ACTIVADO por Drawdown Diario*\n"
+                f"• Pérdida actual: `-${abs(current_loss):.2f}`\n"
+                f"• Límite configurado: `-${self.config.daily_loss_limit:.2f}`\n"
+                "• Estado: *PAUSADO* (Requiere reinicio manual)\n\n"
+                "⚡ _Todas las posiciones abiertas se han cerrado de emergencia y el sistema se ha bloqueado para proteger la cuenta._"
+            )
             
             # Instantly close active positions if any exist
             if self.active_position:
@@ -2170,6 +2211,15 @@ class TradingEngine:
         if time_drift > 5.0 and self.t0_binance > 0:
             log_to_db("FATAL", f"Kill Switch: Stale Data detectado. Retraso de {time_drift:.2f}s. Abortando orden.")
             self.kill_switch_active = True
+            self.kill_switch_reason = "STALE_DATA"
+            self.kill_switch_activated_at = time.time()
+            self._send_telegram_notification(
+                "⚠️ *TZANiX - ALERTA CRÍTICA* ⚠️\n\n"
+                "🚨 *KILL-SWITCH ACTIVADO por Stale Data*\n"
+                f"• Retraso detectado: `{time_drift:.2f}s` (límite: 5.0s)\n"
+                "• Estado: *PAUSADO*\n\n"
+                "⚡ _Sistema bloqueado para evitar operaciones a precios desfasados. Cooldown de 5 minutos iniciado._"
+            )
             return
         
         # --- 4DNR2 SPECTRAL GATEKEEPER ---
