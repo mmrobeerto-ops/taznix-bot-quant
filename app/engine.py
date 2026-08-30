@@ -1986,6 +1986,7 @@ class TradingEngine:
                 ema_9_15m = self._get_ema_15m(period=9)
                 ema_21_15m = self._get_ema_15m(period=21)
                 
+                start_ns = time.perf_counter_ns()
                 is_coherent, reject_reason = self._is_signal_coherent(
                     signal_type=candidate_signal,
                     ofi=ofi,
@@ -1994,8 +1995,12 @@ class TradingEngine:
                     ema_fast_15m=ema_9_15m,
                     ema_slow_15m=ema_21_15m
                 )
+                end_ns = time.perf_counter_ns()
+                decision_latency_ms = (end_ns - start_ns) / 1_000_000.0
                 
-                if not is_coherent:
+                if is_coherent:
+                    log_to_db("INFO", f"⚡ [TELEMETRÍA DE HARDWARE] Gatekeeper evaluó la señal en {decision_latency_ms:.4f} ms")
+                else:
                     log_to_db("WARNING", f"🚫 Senal {candidate_signal} descartada por Gatekeeper: {reject_reason}")
                     self._record_rejected_order(candidate_signal, price, reject_reason)
                     # Clear triggers to prevent execution
