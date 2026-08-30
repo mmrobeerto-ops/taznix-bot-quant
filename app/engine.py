@@ -298,31 +298,22 @@ class TradingEngine:
         is_bullish_trend_15m = False
         is_bearish_trend_15m = False
         
-        if adx >= 22.0 and ema_fast_15m is not None and ema_slow_15m is not None:
+        if adx >= 30.0 and ema_fast_15m is not None and ema_slow_15m is not None:
             is_trending = True
             is_bullish_trend_15m = ema_fast_15m > ema_slow_15m
             is_bearish_trend_15m = ema_fast_15m < ema_slow_15m
 
         # 1. Gatekeeper de Flujo y Desviación Estadística (OFI / Z-Score)
-        MAX_Z_SCORE_EXTENSION = 3.0
         if signal_type == "BUY":
-            if is_trending and is_bullish_trend_15m:
-                if z_score > MAX_Z_SCORE_EXTENSION:
-                    return False, f"Z-Score suicida en tendencia alcista (Z={z_score:.2f} > {MAX_Z_SCORE_EXTENSION}). Esperando pullback."
-                if ofi < 0.0:
-                    return False, f"OFI Incoherente en tendencia alcista (OFI={ofi:.2f} < 0)"
-            else:
-                if not (ofi >= 0.0 and z_score < 0.0):
-                    return False, f"OFI/Z-Score Incoherente en rango (OFI={ofi:.2f} < 0 o Z={z_score:.2f} >= 0)"
+            if ofi < 0.30:
+                return False, f"OFI insuficiente para BUY (OFI={ofi:.2f} < 0.30)"
+            if z_score > 0.5:
+                return False, f"Z-Score sobrecomprado para BUY (Z={z_score:.2f} > 0.5). Esperando pullback."
         elif signal_type == "SELL":
-            if is_trending and is_bearish_trend_15m:
-                if z_score < -MAX_Z_SCORE_EXTENSION:
-                    return False, f"Z-Score suicida en tendencia bajista (Z={z_score:.2f} < -{MAX_Z_SCORE_EXTENSION}). Esperando rebote."
-                if ofi > 0.0:
-                    return False, f"OFI Incoherente en tendencia bajista (OFI={ofi:.2f} > 0)"
-            else:
-                if not (ofi <= 0.0 and z_score > 0.0):
-                    return False, f"OFI/Z-Score Incoherente en rango (OFI={ofi:.2f} > 0 o Z={z_score:.2f} <= 0)"
+            if ofi > -0.30:
+                return False, f"OFI insuficiente para SELL (OFI={ofi:.2f} > -0.30)"
+            if z_score < -0.5:
+                return False, f"Z-Score sobrevendido para SELL (Z={z_score:.2f} < -0.5). Esperando rebote."
 
         # 1.1 VETO HFT: Divergencia OFI vs. TFI (Spoofing / Muro Iceberg)
         if hasattr(self, "last_real_l2_ofi"):
@@ -342,10 +333,10 @@ class TradingEngine:
         # 2. Filtro de Régimen por ADX y Tendencia 15m (EMA 9 vs EMA 21)
         if is_trending:
             if signal_type == "BUY" and not is_bullish_trend_15m:
-                return False, f"ADX Elevado ({adx:.1f} >= 22) bloquea BUY contra tendencia bajista 15m"
+                return False, f"ADX Elevado ({adx:.1f} >= 30) bloquea BUY contra tendencia bajista 15m"
             
             if signal_type == "SELL" and not is_bearish_trend_15m:
-                return False, f"ADX Elevado ({adx:.1f} >= 22) bloquea SELL contra tendencia alcista 15m"
+                return False, f"ADX Elevado ({adx:.1f} >= 30) bloquea SELL contra tendencia alcista 15m"
 
         return True, "APROBADA"
 
@@ -1736,7 +1727,7 @@ class TradingEngine:
             vwap_interacting = vwap_deviation_pct <= self.config.vwap_threshold_pct
             adx_val = self._calculate_adx_14()
             is_golden = False
-            if not is_flat and vwap_deviation_pct <= 0.05 and concrete_floor_deviation_pct <= 0.20 and adx_val >= 22.0:
+            if not is_flat and vwap_deviation_pct <= 0.05 and concrete_floor_deviation_pct <= 0.20 and adx_val >= 30.0:
                 is_golden = True
 
             # Calculate 15m ADX for filtering in fallback if we have enough candles (>= 210 candles = 14 candles of 15m)
@@ -1828,8 +1819,8 @@ class TradingEngine:
                 
                 # Señal Dorada
                 if amp_dom > (sigma * 0.8) and caos > 1.0:
-                    # Protección Anti-Heaviside: Si ADX es menor a 22.0, degradamos para forzar filtros y tamaño normal
-                    if adx_15m < 22.0:
+                    # Protección Anti-Heaviside: Si ADX es menor a 30.0, degradamos para forzar filtros y tamaño normal
+                    if adx_15m < 30.0:
                         is_golden = False
                         if prices[-1] < sfa_data["promedio"]:
                             buy_trigger = True
@@ -1861,7 +1852,7 @@ class TradingEngine:
         adx_15m = adx_series_15m[-1] if adx_series_15m else 0.0
         
         # Trend-Following Crossover Triggers (Hybrid Strategy)
-        if adx_15m >= 22.0:
+        if adx_15m >= 30.0:
             buy_crossover_1m = self._detect_ema_crossover("BUY", fast_period=5, slow_period=13)
             sell_crossover_1m = self._detect_ema_crossover("SELL", fast_period=5, slow_period=13)
             ema9_15m = self._get_ema_15m(period=9)
@@ -2225,7 +2216,7 @@ class TradingEngine:
         # --- 4DNR2 SPECTRAL GATEKEEPER ---
         is_testing = os.environ.get("TESTING") == "True"
         if not is_testing:
-            is_trending = hasattr(self, 'last_adx_15m') and self.last_adx_15m >= 22.0
+            is_trending = hasattr(self, 'last_adx_15m') and self.last_adx_15m >= 30.0
             if not is_trending:
                 with self._4d_lock:
                     res_4d = self.latest_4dnr2_res
@@ -2299,9 +2290,9 @@ class TradingEngine:
         if qty < min_limit:
             qty = min_limit
 
-        # Force strict minimal lot size for production live accounts to test safely (Configured to 0.005 BTC)
+        # Force strict minimal lot size for production live accounts to test safely (Configured to 0.002 BTC)
         if not is_testing:
-            qty = 0.005
+            qty = 0.002
         
         if os.environ.get("TESTING") == "True" and (not getattr(self.config, "use_atr_risk", True) or atr is None or atr == 0.0):
             tp_multiplier = 36.0
