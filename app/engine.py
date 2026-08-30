@@ -2297,9 +2297,35 @@ class TradingEngine:
         if qty < min_limit:
             qty = min_limit
 
-        # Force strict minimal lot size for production live accounts to test safely (Configured to 0.002 BTC)
+        # Force dynamic lot size based on account balance and volatility (Z-Score)
         if not is_testing:
-            qty = 0.002
+            try:
+                balance = self.broker.get_futures_balance()
+            except Exception as e:
+                log_to_db("WARNING", f"Error obteniendo balance para loteo dinámico: {e}. Usando fallback de $24.00")
+                balance = 24.00
+                
+            if balance <= 0.0:
+                balance = 24.00
+                
+            current_z = abs(getattr(self, 'last_z_score', 0.0))
+            if current_z > 2.5:
+                ratio = 3.25
+                vol_label = "Alta Volatilidad / Sobre-extensión (Z > 2.5)"
+            elif current_z > 1.5:
+                ratio = 6.5
+                vol_label = "Volatilidad Moderada / Pullback Estándar (1.5 < Z <= 2.5)"
+            else:
+                ratio = 9.75
+                vol_label = "Volatilidad Baja / Setup de Alta Confianza (Z <= 1.5)"
+                
+            qty = (balance * ratio) / price
+            
+            # Round to stepSize precision (3 decimals for BTC) and cap between min/max limits
+            qty = round(qty, 3)
+            qty = max(0.001, min(0.050, qty))
+            
+            reason = f"{reason} | Lote Dinámico HFT: {qty} BTC [{vol_label}, Balance: ${balance:.2f}, Apalancamiento Real: {ratio}x]"
         
         if os.environ.get("TESTING") == "True" and (not getattr(self.config, "use_atr_risk", True) or atr is None or atr == 0.0):
             tp_multiplier = 36.0
