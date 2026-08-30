@@ -228,3 +228,6 @@ def update_order_stop_loss_async(order_id: str, stop_loss: float):
             
     db_executor.submit(task)
 
+# Always initialize the database when this module is loaded
+init_db()
+
