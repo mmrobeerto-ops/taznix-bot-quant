@@ -397,15 +397,22 @@ class BrokerClient:
             raise e
 
     def get_futures_balance(self) -> float:
-        """Fetches the USDT balance of the Futures account. Returns 0.0 if emulated or on error."""
+        """Fetches the total margin balance of the Futures account. Returns 0.0 if emulated or on error."""
         if self.is_emulated:
             return 19.13
         try:
-            res = self._send_signed_request("GET", "/fapi/v2/balance", {})
-            if isinstance(res, list):
-                for item in res:
-                    if item.get("asset") == "USDT":
-                        return float(item.get("availableBalance", 0.0))
+            res = self._send_signed_request("GET", "/fapi/v2/account", {})
+            if isinstance(res, dict) and "totalMarginBalance" in res:
+                return float(res["totalMarginBalance"])
+            # Fallback to balance endpoint if account endpoint returns unexpected result
+            res_bal = self._send_signed_request("GET", "/fapi/v2/balance", {})
+            if isinstance(res_bal, list):
+                total = 0.0
+                for item in res_bal:
+                    if item.get("asset") in ("USDT", "USDC"):
+                        total += float(item.get("balance", 0.0))
+                if total != 0.0:
+                    return total
             return 0.0
         except Exception as e:
             from app.database import log_to_db
