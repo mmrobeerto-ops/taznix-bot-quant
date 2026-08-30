@@ -1999,8 +1999,10 @@ class TradingEngine:
                 decision_latency_ms = (end_ns - start_ns) / 1_000_000.0
                 
                 if is_coherent:
+                    self.last_gatekeeper_latency_ms = decision_latency_ms
                     log_to_db("INFO", f"⚡ [TELEMETRÍA DE HARDWARE] Gatekeeper evaluó la señal en {decision_latency_ms:.4f} ms")
                 else:
+                    self.last_gatekeeper_latency_ms = None
                     log_to_db("WARNING", f"🚫 Senal {candidate_signal} descartada por Gatekeeper: {reject_reason}")
                     self._record_rejected_order(candidate_signal, price, reject_reason)
                     # Clear triggers to prevent execution
@@ -2465,6 +2467,10 @@ class TradingEngine:
                 f"🔹 Resonancia de Frecuencias: Alineada ✅\n"
                 f"🔹 Z-Score (Volatilidad): {self.last_z_score:.3f}\n"
                 f"🔹 Absorción (OFI): {self.last_ofi:.2f}\n\n"
+                f"⏱️ *TELEMETRÍA DE VELOCIDAD (HFT)*:\n"
+                f"🔸 Decisión Gatekeeper: {getattr(self, 'last_gatekeeper_latency_ms', 0.0) or 0.0:.4f} ms\n"
+                f"🔸 Procesado Red (T1-T0): {lat_proc:.3f} ms\n"
+                f"🔸 Ejecución Binance (T2-T1): {lat_exec:.3f} ms\n\n"
                 f"💬 *MOTIVO*: {reason}"
             )
             self._send_telegram_notification(telegram_msg)
