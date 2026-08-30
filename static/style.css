@@ -240,7 +240,8 @@ body {
     display: flex;
     flex-direction: column;
     justify-content: space-between;
-    height: 100px;
+    min-height: 108px;
+    height: auto;
     position: relative;
     overflow: hidden;
 }
@@ -1278,21 +1279,51 @@ body {
 }
 
 @media (max-width: 480px) {
+    .app-container {
+        padding: 0.25rem !important;
+        gap: 0.4rem !important;
+    }
+    .app-header {
+        padding: 0.5rem !important;
+        gap: 0.4rem !important;
+    }
     .metrics-grid {
         grid-template-columns: 1fr !important;
+        gap: 0.4rem !important;
+    }
+    .metric-card {
+        padding: 0.5rem 0.75rem !important;
+        min-height: 115px !important;
+    }
+    .card-footer-controls {
+        flex-direction: column !important;
+        gap: 0.35rem !important;
+    }
+    .card-footer-controls .btn {
+        height: 32px !important;
+        font-size: 0.7rem !important;
+        width: 100% !important;
+        justify-content: center !important;
+        display: inline-flex !important;
+        align-items: center !important;
     }
     .chart-section {
         height: 300px !important;
-        padding: 0.5rem !important;
+        padding: 0.4rem !important;
     }
-    .header-clock {
+    .header-time {
         font-size: 0.75rem !important;
     }
     .logo-title {
-        font-size: 1.1rem !important;
+        font-size: 1.05rem !important;
     }
     .logo-subtitle {
-        font-size: 0.55rem !important;
+        font-size: 0.52rem !important;
+        letter-spacing: 1px !important;
+    }
+    .status-indicator-badge {
+        padding: 0.2rem 0.4rem !important;
+        font-size: 0.65rem !important;
     }
 }
 
