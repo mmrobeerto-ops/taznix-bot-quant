@@ -478,7 +478,7 @@ class TradingEngine:
 
             # Calculate session stats from closed orders
             closed_orders = db.query(OrderModel).filter(OrderModel.status == "CLOSED").all()
-            self.total_trades = len(closed_orders) + (1 if self.active_position else 0)
+            self.total_trades = len(closed_orders)
             self.session_pnl = sum((o.profit_loss or 0.0) for o in closed_orders)
             self.winning_trades = sum(1 for o in closed_orders if (o.profit_loss or 0.0) > 0)
             
@@ -1486,6 +1486,18 @@ class TradingEngine:
                 f"⚠️ *Atención*: El bot procederá a cerrar la posición localmente y limpiarse, pero debes verificar tu terminal de Binance de inmediato."
             )
 
+        # Calculate Binance taker fees (0.05% entry, 0.05% close)
+        entry_val = pos["entry_price"] * pos["quantity"]
+        close_val = close_price * pos["quantity"]
+        entry_fee = entry_val * 0.0005
+        close_fee = close_val * 0.0005
+        total_fee = entry_fee + close_fee
+        net_pnl = pnl - total_fee
+        
+        # Prop Firm Simulation: 90% Profit Split
+        if net_pnl > 0:
+            net_pnl *= 0.90
+
         db = SessionLocal()
         try:
             db_order = db.query(OrderModel).filter(OrderModel.id == pos["id"]).first()
@@ -1493,14 +1505,14 @@ class TradingEngine:
                 db_order.status = "CLOSED"
                 db_order.close_price = close_price
                 db_order.close_timestamp = current_time
-                db_order.profit_loss = pnl
+                db_order.profit_loss = net_pnl
                 db_order.reason = f"{db_order.reason} | Closed: {reason} at {close_price}"
                 db.commit()
             
-            log_to_db("INFO", f"Position {pos['id']} CLOSED ({reason}). Price: {close_price}, PnL: ${pnl:.2f}")
+            log_to_db("INFO", f"Position {pos['id']} CLOSED ({reason}). Price: {close_price}, PnL Neto: ${net_pnl:.2f} (Bruto: ${pnl:.2f}, Fee: ${total_fee:.2f})")
             
             # If position closed with a loss, register it as a Quarantine Zone (cooldown)
-            if pnl < 0:
+            if net_pnl < 0:
                 self.quarantine_zones.append({
                     "price": pos["entry_price"],
                     "expires_at": current_time + 1800,
@@ -1513,14 +1525,13 @@ class TradingEngine:
         finally:
             db.close()
 
-        # Update in-memory stats
-        self.session_pnl += pnl
+        # Update in-memory stats (Net P&L, only once)
+        self.session_pnl += net_pnl
         self.total_trades += 1
-        if pnl > 0:
+        if net_pnl > 0:
             self.winning_trades += 1
 
         # Track drawdown
-        self.session_pnl += pnl
         self.peak_session_pnl = max(self.peak_session_pnl, self.session_pnl)
         
         # Finalize Latency Audit
@@ -1536,18 +1547,6 @@ class TradingEngine:
         drawdown = self.peak_session_pnl - self.session_pnl
         if drawdown > self.max_drawdown:
             self.max_drawdown = drawdown
-
-        # Calculate Binance taker fees (0.05% entry, 0.05% close)
-        entry_val = pos["entry_price"] * pos["quantity"]
-        close_val = close_price * pos["quantity"]
-        entry_fee = entry_val * 0.0005
-        close_fee = close_val * 0.0005
-        total_fee = entry_fee + close_fee
-        net_pnl = pnl - total_fee
-        
-        # Prop Firm Simulation: 90% Profit Split
-        if net_pnl > 0:
-            net_pnl *= 0.90
         
         # Calculate slippage details
         slippage_text = ""
@@ -2568,9 +2567,7 @@ class TradingEngine:
 
         win_rate = 0.0
         if self.total_trades > 0:
-            closed_trades = self.total_trades - (1 if self.active_position else 0)
-            if closed_trades > 0:
-                win_rate = (self.winning_trades / closed_trades) * 100.0
+            win_rate = (self.winning_trades / self.total_trades) * 100.0
 
         # Fetch real-time futures balance from broker
         balance = 19.13
