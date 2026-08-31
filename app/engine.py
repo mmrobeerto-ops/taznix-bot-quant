@@ -2200,6 +2200,7 @@ class TradingEngine:
     def _execute_order(self, order_type: str, price: float, reason: str, is_golden: bool = False, custom_tp: Optional[float] = None):
         """Executes an order locally and dispatches a market entry execution request to broker API."""
         t1_ns = time.perf_counter_ns()
+        t1_epoch_ms = time.time_ns() / 1_000_000.0
         
         if self.kill_switch_active:
             return
@@ -2379,10 +2380,10 @@ class TradingEngine:
             # --- LATENCY TRACKING ---
             t2_ns = time.perf_counter_ns()
             
-            lat_t1_ms = t1_ns / 1e6
+            lat_t1_ms = t1_epoch_ms
             lat_t2_ms = t2_ns / 1e6
             t0_ms = self.t0_binance
-            lat_proc = (t1_ns / 1e6) - self.t0_binance if self.t0_binance > 0 else 0
+            lat_proc = t1_epoch_ms - self.t0_binance if self.t0_binance > 0 else 0
             lat_exec = (t2_ns - t1_ns) / 1e6
             
             # Kill Switch 2: Latencia Desbocada
