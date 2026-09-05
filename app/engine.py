@@ -2234,8 +2234,10 @@ class TradingEngine:
                 
                 # CAPA 2: CERROJO FINAL DE MASA CRÍTICA (Fisión Cinética por Montecarlo Vectorizado)
                 factor_k = res_4d.get("factor_k", 0.0)
-                if factor_k < 0.5:
-                    self._record_rejected_order(order_type, price, f"{reason} [REJECTED: Filtro Masa Crítica - Factor K Subcrítico ({factor_k:.4f} < 0.5)]")
+                # Las Señales Doradas (validadas por RSI y Volumen) requieren menos masa crítica
+                k_threshold = 0.25 if is_golden else 0.5
+                if factor_k < k_threshold:
+                    self._record_rejected_order(order_type, price, f"{reason} [REJECTED: Filtro Masa Crítica - Factor K Subcrítico ({factor_k:.4f} < {k_threshold})]")
                     return
                 
                 # If green light, append the stats to the reason for the Telegram message
