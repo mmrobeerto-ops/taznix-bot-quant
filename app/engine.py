@@ -1972,7 +1972,6 @@ class TradingEngine:
         
         if not hasattr(self, 'z_score_history'):
             self.z_score_history = []
-        import time
         curr_t = time.time()
         self.z_score_history.append((curr_t, z_score))
         self.z_score_history = [x for x in self.z_score_history if curr_t - x[0] <= 4.0]
