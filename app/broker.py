@@ -28,7 +28,12 @@ class BrokerClient:
         else:
             self.base_url = "https://fapi.binance.com"
             
-        self.is_emulated = True
+        self.is_emulated = (
+            not self.api_key or 
+            self.api_key.startswith("EVAL_") or 
+            self.api_key == "YOUR_BINANCE_API_KEY" or
+            not self.api_secret
+        )
 
 
         # Dynamic lot sizing defaults

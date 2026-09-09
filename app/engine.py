@@ -962,7 +962,7 @@ class TradingEngine:
         self._manage_active_risk(price, current_time)
 
         # 2. Evaluate new entries if autopilot is running and we have no active position and Kill-Switch is off
-        if True and not self.active_position and not self.kill_switch_active and not self.news_paused:
+        if self.config.run_autopilot and not self.active_position and not self.kill_switch_active and not self.news_paused:
             self._evaluate_signals(tick_indicators)
 
         tick_indicators["vwap_upper"] = getattr(self, "last_vwap_upper", vwap)
@@ -1808,7 +1808,7 @@ class TradingEngine:
         adx_series_15m = self._calculate_adx_14(closed_15m, return_series=True)
         adx_15m = adx_series_15m[-1] if adx_series_15m else 0.0
         
-        buy_trigger = True  # SYNTHETIC TRIGGER
+        buy_trigger = False
         sell_trigger = False
         is_golden = False
         reason = ""
@@ -1911,7 +1911,7 @@ class TradingEngine:
             std_dev = variance ** 0.5
             
         if std_dev > 0.0:
-            z_score = -15.0  # SYNTHETIC CRASH INJECTED
+            z_score = (price - vwap) / std_dev
             
             if is_range_mode:
                 upper_band = vwap + 2.0 * std_dev
@@ -2029,7 +2029,7 @@ class TradingEngine:
                     log_to_db("WARNING", f"🚫 Senal {candidate_signal} descartada por Gatekeeper: {reject_reason}")
                     self._record_rejected_order(candidate_signal, price, reject_reason)
                     # Clear triggers to prevent execution
-                    buy_trigger = True  # SYNTHETIC TRIGGER
+                    buy_trigger = False
                     sell_trigger = False
                     is_range_mode = False
 
@@ -2098,14 +2098,14 @@ class TradingEngine:
         if (buy_trigger or sell_trigger) and self._is_funding_veto_window():
             sig = "BUY" if buy_trigger else "SELL"
             self._record_rejected_order(sig, price, f"Funding Veto Window active [REJECTED: Funding Settlement Veto Window active]")
-            buy_trigger = True  # SYNTHETIC TRIGGER
+            buy_trigger = False
             sell_trigger = False
 
         # 2. Micro-Price Veto Check
         if buy_trigger and self.last_micro_price is not None and self.last_mid_price is not None:
             if self.last_micro_price < self.last_mid_price:
                 self._record_rejected_order("BUY", price, f"Micro-Price Veto [REJECTED: Micro-Price Veto (P_micro {self.last_micro_price:.2f} < P_mid {self.last_mid_price:.2f})]")
-                buy_trigger = True  # SYNTHETIC TRIGGER
+                buy_trigger = False
                 
         if sell_trigger and self.last_micro_price is not None and self.last_mid_price is not None:
             if self.last_micro_price > self.last_mid_price:
