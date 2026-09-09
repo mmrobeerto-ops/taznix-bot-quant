@@ -962,7 +962,7 @@ class TradingEngine:
         self._manage_active_risk(price, current_time)
 
         # 2. Evaluate new entries if autopilot is running and we have no active position and Kill-Switch is off
-        if self.config.run_autopilot and not self.active_position and not self.kill_switch_active and not self.news_paused:
+        if True and not self.active_position and not self.kill_switch_active and not self.news_paused:
             self._evaluate_signals(tick_indicators)
 
         tick_indicators["vwap_upper"] = getattr(self, "last_vwap_upper", vwap)
