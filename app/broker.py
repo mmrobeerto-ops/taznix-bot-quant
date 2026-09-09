@@ -152,7 +152,34 @@ class BrokerClient:
                 log_to_db("INFO", api_log_msg)
                 print(api_log_msg)
                 
-                res = self._send_signed_request("POST", "/fapi/v1/order", params)
+                max_repricing_retries = 5
+                for retry in range(max_repricing_retries):
+                    try:
+                        res = self._send_signed_request("POST", "/fapi/v1/order", params)
+                        break
+                    except Exception as order_err:
+                        err_str = str(order_err)
+                        if "-5022" in err_str or "Post Only" in err_str:
+                            if retry < max_repricing_retries - 1:
+                                try:
+                                    # Fetch fresh book ticker
+                                    book_ticker_res = requests.get(book_ticker_url, timeout=1).json()
+                                    new_bid = float(book_ticker_res.get("bidPrice", 0.0))
+                                    new_ask = float(book_ticker_res.get("askPrice", 0.0))
+                                    new_limit = new_bid if order_type.upper() == "BUY" else new_ask
+                                    
+                                    # Check max deviation of 0.05%
+                                    deviation = abs(new_limit - price) / price
+                                    if deviation > 0.0005:
+                                        raise Exception(f"Repricing aborted: price deviation {deviation*100.0:.3f}% > 0.05% max threshold")
+                                        
+                                    params["price"] = f"{new_limit:.2f}"
+                                    log_to_db("WARNING", f"[-5022] Post-Only limit crossed book. Repricing to ${new_limit:.2f} (Attempt {retry+1}/{max_repricing_retries})")
+                                    continue
+                                except Exception as inner_e:
+                                    if "Repricing aborted" in str(inner_e):
+                                        raise inner_e
+                        raise order_err
                 
                 # Check for Post-Only cancellation
                 if res.get("status") in ["EXPIRED", "CANCELED"]:
@@ -203,6 +230,19 @@ class BrokerClient:
                     log_to_db("CRITICAL", err_msg)
                     print(err_msg)
                     raise e
+ 
+    def ping_dead_mans_switch(self, timeout_ms: int = 15000):
+        """Pings the Binance countdownCancelAll endpoint to act as a Dead Man's Switch."""
+        if self.is_emulated:
+            return
+        try:
+            self._send_signed_request("POST", "/fapi/v1/countdownCancelAll", {
+                "symbol": "BTCUSDT",
+                "countdownTime": timeout_ms
+            })
+        except Exception as e:
+            # Do not spam DB on heartbeat failures, just log to console
+            print(f"Warning: Dead Man's Switch ping failed: {e}")
  
         if self.is_emulated:
             broker_order_id = f"brk_{int(time.time())}_{uuid.uuid4().hex[:6]}"

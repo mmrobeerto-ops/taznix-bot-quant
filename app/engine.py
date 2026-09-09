@@ -303,6 +303,21 @@ class TradingEngine:
             is_bullish_trend_15m = ema_fast_15m > ema_slow_15m
             is_bearish_trend_15m = ema_fast_15m < ema_slow_15m
 
+
+        # --- Z-SCORE HARD CAP & TOXIC FLOW (DELTA V) ---
+        if abs(z_score) > 4.0:
+            return False, f"FATAL Z-SCORE: Mercado colapsando (Z={z_score:.2f}). Cortocircuito activado."
+            
+        if hasattr(self, 'z_score_history') and len(self.z_score_history) >= 2:
+            old_z = self.z_score_history[0][1]
+            delta_z = z_score - old_z
+            # If Z-score dropped by > 10 in < 4s, it's a liquidation cascade (Toxic Flow)
+            if signal_type == "BUY" and delta_z < -10.0:
+                return False, f"TOXIC FLOW DETECTED: Delta V agresivo (dZ={delta_z:.2f} en <4s). Riesgo de Cuchillo Cayendo."
+            if signal_type == "SELL" and delta_z > 10.0:
+                return False, f"TOXIC FLOW DETECTED: Delta V agresivo (dZ={delta_z:.2f} en <4s). Riesgo de Short Squeeze."
+        # -----------------------------------------------
+
         # 1. Gatekeeper de Flujo y Desviación Estadística (OFI / Z-Score)
         if signal_type == "BUY":
             if ofi < 0.30:
@@ -1954,6 +1969,14 @@ class TradingEngine:
         self.last_buy_ratio = buy_ratio
         self.last_ofi = ofi
         self.last_z_score = z_score
+        
+        if not hasattr(self, 'z_score_history'):
+            self.z_score_history = []
+        import time
+        curr_t = time.time()
+        self.z_score_history.append((curr_t, z_score))
+        self.z_score_history = [x for x in self.z_score_history if curr_t - x[0] <= 4.0]
+
         
         std_dev = 0.0
         if len(closed_1m) >= 20:

@@ -245,6 +245,14 @@ class MarketDataFeed:
                 self.inst_sell_vol *= 0.95
                 self.tick_counter += 1
                 
+                # Binance Dead Man's Switch (Auto-Cancel) heartbeat every 10 seconds
+                if self.tick_counter % 10 == 0:
+                    try:
+                        loop = asyncio.get_running_loop()
+                        loop.run_in_executor(None, self.engine.broker.ping_dead_mans_switch, 15000)
+                    except Exception as e:
+                        print(f"Failed to trigger dead man's switch ping: {e}")
+                
                 # Periodically simulate news events for filter demonstration (only in emulated fallback mode!)
                 # if self.tick_counter % 80 == 0 and self.engine.broker.is_emulated:
                 #    self._generate_mock_news()
