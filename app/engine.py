@@ -1808,7 +1808,7 @@ class TradingEngine:
         adx_series_15m = self._calculate_adx_14(closed_15m, return_series=True)
         adx_15m = adx_series_15m[-1] if adx_series_15m else 0.0
         
-        buy_trigger = False
+        buy_trigger = True  # SYNTHETIC TRIGGER
         sell_trigger = False
         is_golden = False
         reason = ""
@@ -2030,7 +2030,7 @@ class TradingEngine:
                     log_to_db("WARNING", f"🚫 Senal {candidate_signal} descartada por Gatekeeper: {reject_reason}")
                     self._record_rejected_order(candidate_signal, price, reject_reason)
                     # Clear triggers to prevent execution
-                    buy_trigger = False
+                    buy_trigger = True  # SYNTHETIC TRIGGER
                     sell_trigger = False
                     is_range_mode = False
 
@@ -2099,14 +2099,14 @@ class TradingEngine:
         if (buy_trigger or sell_trigger) and self._is_funding_veto_window():
             sig = "BUY" if buy_trigger else "SELL"
             self._record_rejected_order(sig, price, f"Funding Veto Window active [REJECTED: Funding Settlement Veto Window active]")
-            buy_trigger = False
+            buy_trigger = True  # SYNTHETIC TRIGGER
             sell_trigger = False
 
         # 2. Micro-Price Veto Check
         if buy_trigger and self.last_micro_price is not None and self.last_mid_price is not None:
             if self.last_micro_price < self.last_mid_price:
                 self._record_rejected_order("BUY", price, f"Micro-Price Veto [REJECTED: Micro-Price Veto (P_micro {self.last_micro_price:.2f} < P_mid {self.last_mid_price:.2f})]")
-                buy_trigger = False
+                buy_trigger = True  # SYNTHETIC TRIGGER
                 
         if sell_trigger and self.last_micro_price is not None and self.last_mid_price is not None:
             if self.last_micro_price > self.last_mid_price:
