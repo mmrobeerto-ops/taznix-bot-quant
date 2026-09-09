@@ -1911,7 +1911,7 @@ class TradingEngine:
             std_dev = variance ** 0.5
             
         if std_dev > 0.0:
-            z_score = (price - vwap) / std_dev
+            z_score = -15.0  # SYNTHETIC CRASH INJECTED
             
             if is_range_mode:
                 upper_band = vwap + 2.0 * std_dev
