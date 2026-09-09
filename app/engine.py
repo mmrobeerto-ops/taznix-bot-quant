@@ -2024,6 +2024,8 @@ class TradingEngine:
                     self.last_gatekeeper_latency_ms = decision_latency_ms
                     log_to_db("INFO", f"⚡ [TELEMETRÍA DE HARDWARE] Gatekeeper evaluó la señal en {decision_latency_ms:.4f} ms")
                 else:
+                    if "FATAL Z-SCORE" in reject_reason or "TOXIC FLOW" in reject_reason:
+                        log_to_db("WARNING", f"GATEKEEPER INTERCEPTION: {reject_reason}")
                     self.last_gatekeeper_latency_ms = None
                     log_to_db("WARNING", f"🚫 Senal {candidate_signal} descartada por Gatekeeper: {reject_reason}")
                     self._record_rejected_order(candidate_signal, price, reject_reason)
