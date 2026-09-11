@@ -3,6 +3,14 @@ import os
 import asyncio
 from dotenv import load_dotenv
 load_dotenv()
+import sys
+if sys.platform != "win32":
+    try:
+        import uvloop
+        asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
+    except ImportError:
+        pass
+
 from typing import Set
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Query
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
