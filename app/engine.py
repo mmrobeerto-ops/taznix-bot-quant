@@ -1,6 +1,7 @@
 from app.quantum_bridge import evaluate_market_topology
 import uuid
 import time
+import asyncio
 import os
 import requests
 import threading
