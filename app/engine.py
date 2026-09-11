@@ -508,8 +508,8 @@ class TradingEngine:
                 self.quarantine_zones.append({
                     "price": trade.entry_price,
                     "expires_at": trade.close_timestamp + 1800,
-                    "lower_bound": trade.entry_price * (1.0 - 0.0015),
-                    "upper_bound": trade.entry_price * (1.0 + 0.0015)
+                    "lower_bound": trade.entry_price * (1.0 - 0.0025),
+                    "upper_bound": trade.entry_price * (1.0 + 0.0025)
                 })
             
             # Load latest ticks to rebuild 1-minute candles (covers up to 33 hours of history)
@@ -1531,10 +1531,10 @@ class TradingEngine:
                 self.quarantine_zones.append({
                     "price": pos["entry_price"],
                     "expires_at": current_time + 1800,
-                    "lower_bound": pos["entry_price"] * (1.0 - 0.0015),
-                    "upper_bound": pos["entry_price"] * (1.0 + 0.0015)
+                    "lower_bound": pos["entry_price"] * (1.0 - 0.0025),
+                    "upper_bound": pos["entry_price"] * (1.0 + 0.0025)
                 })
-                log_to_db("WARNING", f"QUARANTINE ZONE: entry price ${pos['entry_price']:.2f} is now a toxic zone (+/- 0.15%) for 30 minutes.")
+                log_to_db("WARNING", f"QUARANTINE ZONE: entry price ${pos['entry_price']:.2f} is now a toxic zone (+/- 0.25%) for 30 minutes.")
         except Exception as e:
             print(f"Error closing position in DB: {e}")
         finally:
@@ -1712,7 +1712,7 @@ class TradingEngine:
         for zone in self.quarantine_zones:
             if zone["lower_bound"] <= price <= zone["upper_bound"]:
                 in_quarantine = True
-                quarantine_reason = f"Price ${price:.2f} is in Quarantine Zone (+/- 0.15%) around failed entry ${zone['price']:.2f} (expires in {int(zone['expires_at'] - current_time)}s)"
+                quarantine_reason = f"Price ${price:.2f} is in Quarantine Zone (+/- 0.25%) around failed entry ${zone['price']:.2f} (expires in {int(zone['expires_at'] - current_time)}s)"
                 break
 
         concrete_floor_deviation_pct = abs(sma_200 - vwap) / vwap * 100.0
