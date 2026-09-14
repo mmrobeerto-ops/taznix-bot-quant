@@ -2153,6 +2153,9 @@ class TradingEngine:
             else:
                 reason = f"Standard BUY: {reason} | RSI: {('None' if current_rsi is None else f'{current_rsi:.1f}')}"
 
+            if adx_15m >= 30.0:
+                reason = f"Breakout Mode Activado (ADX={adx_15m:.1f} | Z={z_score:.2f}) | " + reason
+
             if vwap_deviation_pct > 1.25:
                 self._record_rejected_order("BUY", price, f"{reason} [REJECTED: Price overextended from VWAP ({vwap_deviation_pct:.3f}% > 1.25%)]")
             # elif current_rsi is not None and current_rsi > 65.0:
@@ -2190,6 +2193,9 @@ class TradingEngine:
                 reason = f"🌟 GOLDEN SELL ENTRY 🌟: {reason} | RSI recently >= 60 | Volume: {(1.0-buy_ratio)*100.0:.1f}%"
             else:
                 reason = f"Standard SELL: {reason} | RSI: {('None' if current_rsi is None else f'{current_rsi:.1f}')}"
+
+            if adx_15m >= 30.0:
+                reason = f"Breakout Mode Activado (ADX={adx_15m:.1f} | Z={z_score:.2f}) | " + reason
  
             is_short_squeeze = (oi_cvd_regime == "SHORT_SQUEEZE")
             if is_short_squeeze:
