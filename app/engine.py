@@ -1695,6 +1695,10 @@ class TradingEngine:
         # Ensure all indicators are ready
         if sma_200 is None or ema_9 is None or ema_21 is None or vwap is None:
             return
+            
+        # MUTEX LOCK: Prevent concurrent evaluation while an order is in flight
+        if getattr(self, "is_executing", False):
+            return
 
         # Check if an instant manual entry is forced (bypasses all filters to verify connection)
         force_dir = getattr(self, "force_instant_entry", None)
@@ -2223,10 +2227,17 @@ class TradingEngine:
 
     def _execute_order(self, order_type: str, price: float, reason: str, is_golden: bool = False, custom_tp: Optional[float] = None):
         """Executes an order locally and dispatches a market entry execution request to broker API."""
+        self.is_executing = True
+        def release_lock():
+            time.sleep(1.5)
+            self.is_executing = False
+        threading.Thread(target=release_lock, daemon=True).start()
+        
         t1_ns = time.perf_counter_ns()
         t1_epoch_ms = time.time_ns() / 1_000_000.0
         
         if self.kill_switch_active:
+            self.is_executing = False
             return
             
         # Kill Switch 1: Desconexión Silenciosa (Stale Data > 5s)
