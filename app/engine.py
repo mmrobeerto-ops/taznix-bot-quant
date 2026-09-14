@@ -306,8 +306,10 @@ class TradingEngine:
 
 
         # --- Z-SCORE HARD CAP & TOXIC FLOW (DELTA V) ---
-        if abs(z_score) > 4.0:
-            return False, f"FATAL Z-SCORE: Mercado colapsando (Z={z_score:.2f}). Cortocircuito activado."
+        # Allow larger Z-scores during strong trends to avoid paralyzing the bot
+        z_hard_cap = 15.0 if is_trending else 4.0
+        if abs(z_score) > z_hard_cap:
+            return False, f"FATAL Z-SCORE: Mercado colapsando (Z={z_score:.2f} > {z_hard_cap}). Cortocircuito activado."
             
         if hasattr(self, 'z_score_history') and len(self.z_score_history) >= 2:
             old_z = self.z_score_history[0][1]
@@ -323,13 +325,16 @@ class TradingEngine:
         if signal_type == "BUY":
             if ofi < 0.30:
                 return False, f"OFI insuficiente para BUY (OFI={ofi:.2f} < 0.30)"
-            if z_score > 0.5:
-                return False, f"Z-Score sobrecomprado para BUY (Z={z_score:.2f} > 0.5). Esperando pullback."
+            # En tendencia fuerte (ADX>30), permitimos comprar breakouts (hasta Z=3.0). En rango, exigimos pullback (Z<0.5).
+            z_buy_max = 3.0 if is_trending else 0.5
+            if z_score > z_buy_max:
+                return False, f"Z-Score sobrecomprado para BUY (Z={z_score:.2f} > {z_buy_max}). Esperando pullback."
         elif signal_type == "SELL":
             if ofi > -0.30:
                 return False, f"OFI insuficiente para SELL (OFI={ofi:.2f} > -0.30)"
-            if z_score < -0.5:
-                return False, f"Z-Score sobrevendido para SELL (Z={z_score:.2f} < -0.5). Esperando rebote."
+            z_sell_min = -3.0 if is_trending else -0.5
+            if z_score < z_sell_min:
+                return False, f"Z-Score sobrevendido para SELL (Z={z_score:.2f} < {z_sell_min}). Esperando rebote."
 
         # 1.1 VETO HFT: Divergencia OFI vs. TFI (Spoofing / Muro Iceberg)
         if hasattr(self, "last_real_l2_ofi"):
