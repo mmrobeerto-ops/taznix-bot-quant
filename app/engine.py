@@ -2288,9 +2288,11 @@ class TradingEngine:
                     return
                 
                 # If green light, append the stats to the reason for the Telegram message
-                reason = f"{reason} | 4DNR2: {res_4d.get('ratio_resonancia_4d', 0)*100:.2f}% (K: {factor_k:.2f})"
+                if "4DNR2:" not in reason:
+                    reason = f"{reason} | 4DNR2: {res_4d.get('ratio_resonancia_4d', 0)*100:.2f}% (K: {factor_k:.2f})"
             else:
-                reason = f"{reason} | 4DNR2: Bypassed (Trending Mode, ADX={self.last_adx_15m:.1f})"
+                if "4DNR2:" not in reason:
+                    reason = f"{reason} | 4DNR2: Bypassed (Trending Mode, ADX={self.last_adx_15m:.1f})"
         # ---------------------------------
         
         # Setup Initial Stop Loss and Take Profit (ATR-based dynamic Stop Loss)
@@ -2374,7 +2376,8 @@ class TradingEngine:
             qty = round(qty, 3)
             qty = max(0.001, min(0.050, qty))
             
-            reason = f"{reason} | Lote Dinámico HFT: {qty} BTC [{vol_label}, Balance: ${balance:.2f}, Apalancamiento Real: {ratio}x]"
+            if "Lote Dinámico HFT:" not in reason:
+                reason = f"{reason} | Lote Dinámico HFT: {qty} BTC [{vol_label}, Balance: ${balance:.2f}, Apalancamiento Real: {ratio}x]"
         
         if os.environ.get("TESTING") == "True" and (not getattr(self.config, "use_atr_risk", True) or atr is None or atr == 0.0):
             tp_multiplier = 36.0
