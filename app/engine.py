@@ -735,11 +735,6 @@ class TradingEngine:
         spot_micro_price: Optional[float] = None
     ) -> Dict:
         """Processes an incoming market tick, computes indicators, evaluates signals, and manages risk."""
-        import time
-        with getattr(self, "_trade_lock", __import__("threading").Lock()):
-            current_time = time.time()
-            if current_time - getattr(self, "last_trade_time", 0.0) < 2.0:
-                return {}
         if self.kill_switch_active:
             # Auto-Reset para Stale Data (Desconexión de red temporal)
             if getattr(self, "kill_switch_reason", None) == "STALE_DATA":
@@ -2252,7 +2247,18 @@ class TradingEngine:
 
     def _execute_order(self, order_type: str, price: float, reason: str, is_golden: bool = False, custom_tp: Optional[float] = None, pegging_attempt: int = 0):
         """Executes an order locally and dispatches a market entry execution request to broker API."""
-        self.last_trade_time = time.time()
+        import time
+        import threading
+        
+        # ATOMIC DEBOUNCER: Prevent uvloop parallel tasks from spamming orders
+        with getattr(self, "_trade_lock", threading.Lock()):
+            current_time = time.time()
+            if pegging_attempt == 0 and current_time - getattr(self, "last_trade_time", 0.0) < 2.0:
+                log_to_db("WARNING", "Atomic Debouncer blocked a parallel duplicate signal.")
+                return
+            if pegging_attempt == 0:
+                self.last_trade_time = current_time
+
         self.is_executing = True
         def release_lock():
             time.sleep(1.5)
@@ -2566,7 +2572,8 @@ class TradingEngine:
                 f"🔸 Ejecución Binance (T2-T1): {lat_exec:.3f} ms\n\n"
                 f"💬 *MOTIVO*: {reason}"
             )
-            self._send_telegram_notification(telegram_msg)
+            if pegging_attempt == 0:
+                self._send_telegram_notification(telegram_msg)
             
             # If order is pending (NEW) or partially filled, start the pegging monitor loop in background
             if db_status in ["NEW", "PARTIALLY_FILLED"]:
