@@ -1184,8 +1184,8 @@ class TradingEngine:
             self._close_position(exit_reason, price, pnl_val, current_time)
             return
 
-        # TP1: Take partial 50% profit at 0.60% gross gain (0.5% net target + 0.08% commissions + 0.02% spread) and move Stop Loss to Break-even
-        if os.environ.get("TESTING") != "True" and pnl_pct >= 0.60 and not pos.get("tp1_reached", False):
+        # TP1: Take partial 50% profit at 0.35% gross gain and move Stop Loss to Break-even
+        if os.environ.get("TESTING") != "True" and pnl_pct >= 0.35 and not pos.get("tp1_reached", False):
             pos["tp1_reached"] = True
             formatted_half = self.broker.format_quantity(qty * 0.5)
             if formatted_half >= qty or formatted_half <= 0.0:
@@ -1237,7 +1237,7 @@ class TradingEngine:
         entry_atr = pos.get("entry_atr")
         atr_mult = getattr(self.config, "atr_multiplier", 18.0)
         if os.environ.get("TESTING") != "True":
-            atr_mult = max(18.0, atr_mult)
+            atr_mult = max(8.0, atr_mult)
         
         # If ATR is available and use_atr_risk is enabled, use ATR-based trailing stop and breakeven
         if self.config.use_atr_risk and entry_atr is not None and entry_atr > 0.0:
@@ -1264,7 +1264,7 @@ class TradingEngine:
             is_testing = os.environ.get("TESTING") == "True"
             be_trigger_mult = getattr(self.config, "breakeven_atr_trigger", 2.0)
             if not is_testing:
-                be_trigger_mult = max(10.0, be_trigger_mult)  # Relaxed BE for swing trading
+                be_trigger_mult = max(2.0, be_trigger_mult)  # Standard BE for HFT scalping
                 
             if pos["type"] == "BUY":
                 trigger_price = entry_price + (be_trigger_mult * entry_atr)
@@ -2156,7 +2156,7 @@ class TradingEngine:
             if adx_15m >= 30.0:
                 reason = f"Breakout Mode Activado (ADX={adx_15m:.1f} | Z={z_score:.2f}) | " + reason
 
-            if vwap_deviation_pct > 1.25:
+            if vwap_deviation_pct > 1.25 and adx_15m < 35.0:
                 self._record_rejected_order("BUY", price, f"{reason} [REJECTED: Price overextended from VWAP ({vwap_deviation_pct:.3f}% > 1.25%)]")
             # elif current_rsi is not None and current_rsi > 65.0:
                 # pass
@@ -2202,7 +2202,7 @@ class TradingEngine:
                 vol_msg = "Short Squeeze active (OI down, CVD aligned)"
                 reason = f"{reason} | {vol_msg}"
                 self._execute_order("SELL", price, reason, is_golden=is_golden)
-            elif vwap_deviation_pct > 1.25:
+            elif vwap_deviation_pct > 1.25 and adx_15m < 35.0:
                 self._record_rejected_order("SELL", price, f"{reason} [REJECTED: Price overextended from VWAP ({vwap_deviation_pct:.3f}% > 1.25%)]")
             # elif current_rsi is not None and current_rsi < 35.0:
                 # pass
@@ -2236,7 +2236,7 @@ class TradingEngine:
         return (v2["close"] < v2["open"]) and (v1["close"] < v1["open"]) and (v0["close"] < v0["open"]) and \
                (v2["close"] > v1["close"]) and (v1["close"] > v0["close"])
 
-    def _execute_order(self, order_type: str, price: float, reason: str, is_golden: bool = False, custom_tp: Optional[float] = None):
+    def _execute_order(self, order_type: str, price: float, reason: str, is_golden: bool = False, custom_tp: Optional[float] = None, pegging_attempt: int = 0):
         """Executes an order locally and dispatches a market entry execution request to broker API."""
         self.is_executing = True
         def release_lock():
@@ -2300,7 +2300,7 @@ class TradingEngine:
         atr = self._calculate_atr(14)
         atr_mult = getattr(self.config, "atr_multiplier", 18.0)
         if not is_testing:
-            atr_mult = max(18.0, atr_mult)
+            atr_mult = max(8.0, atr_mult)
  
         # Calculate SL distance for position sizing
         if self.config.use_atr_risk and atr is not None and atr > 0.0:
@@ -2556,9 +2556,9 @@ class TradingEngine:
             # If order is pending (NEW) or partially filled, start the pegging monitor loop in background
             if db_status in ["NEW", "PARTIALLY_FILLED"]:
                 import asyncio
-                pegging_attempt = getattr(self, "pegging_attempts", {})
-                pegging_attempt[order_id] = 0
-                self.pegging_attempts = pegging_attempt
+                pegging_dict = getattr(self, "pegging_attempts", {})
+                pegging_dict[order_id] = pegging_attempt
+                self.pegging_attempts = pegging_dict
                 
                 try:
                     loop = asyncio.get_running_loop()
@@ -2938,7 +2938,7 @@ class TradingEngine:
                     self.pegging_attempts[order_id] = attempts + 1
                     
                     # Re-execute order at new price
-                    self._execute_order(order_type, new_price, reason + " [PEGGED]", is_golden=False)
+                    self._execute_order(order_type, new_price, reason + " [PEGGED]", is_golden=False, custom_tp=None, pegging_attempt=attempts + 1)
                 else:
                     # Abort: cancel order and clear active position
                     log_to_db("INFO", f"[PEGGING] Order {order_id} unfilled after 400ms. Aborting (favorable trend: {keep_going}, attempts: {attempts}/3).")
