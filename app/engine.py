@@ -1705,6 +1705,10 @@ class TradingEngine:
         if getattr(self, "is_executing", False):
             return
 
+        # Prevent opening a new position if one is already active
+        if self.active_position is not None:
+            return
+
         # Check if an instant manual entry is forced (bypasses all filters to verify connection)
         force_dir = getattr(self, "force_instant_entry", None)
         if force_dir in ["BUY", "SELL"]:
@@ -2938,7 +2942,8 @@ class TradingEngine:
                     self.pegging_attempts[order_id] = attempts + 1
                     
                     # Re-execute order at new price
-                    self._execute_order(order_type, new_price, reason + " [PEGGED]", is_golden=False, custom_tp=None, pegging_attempt=attempts + 1)
+                    new_reason = reason if " [PEGGED]" in reason else reason + " [PEGGED]"
+                    self._execute_order(order_type, new_price, new_reason, is_golden=False, custom_tp=None, pegging_attempt=attempts + 1)
                 else:
                     # Abort: cancel order and clear active position
                     log_to_db("INFO", f"[PEGGING] Order {order_id} unfilled after 400ms. Aborting (favorable trend: {keep_going}, attempts: {attempts}/3).")
