@@ -45,6 +45,11 @@ class TradingEngine:
         # Active trades (only 1 active position at a time is a standard improvement for safety)
         self.active_position: Optional[Dict] = None
         
+        # Concurrency safety
+        import threading
+        self._trade_lock = threading.Lock()
+        self.last_trade_time = 0.0
+        
         # Session states
         self.session_pnl = 0.0
         self.total_trades = 0
@@ -730,6 +735,11 @@ class TradingEngine:
         spot_micro_price: Optional[float] = None
     ) -> Dict:
         """Processes an incoming market tick, computes indicators, evaluates signals, and manages risk."""
+        import time
+        with getattr(self, "_trade_lock", __import__("threading").Lock()):
+            current_time = time.time()
+            if current_time - getattr(self, "last_trade_time", 0.0) < 2.0:
+                return {}
         if self.kill_switch_active:
             # Auto-Reset para Stale Data (Desconexión de red temporal)
             if getattr(self, "kill_switch_reason", None) == "STALE_DATA":
@@ -2242,6 +2252,7 @@ class TradingEngine:
 
     def _execute_order(self, order_type: str, price: float, reason: str, is_golden: bool = False, custom_tp: Optional[float] = None, pegging_attempt: int = 0):
         """Executes an order locally and dispatches a market entry execution request to broker API."""
+        self.last_trade_time = time.time()
         self.is_executing = True
         def release_lock():
             time.sleep(1.5)
